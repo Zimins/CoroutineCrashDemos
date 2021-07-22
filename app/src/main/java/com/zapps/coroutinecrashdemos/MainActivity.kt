@@ -51,6 +51,9 @@ class MainActivity : AppCompatActivity() {
         binding.testSuperviorButton.setOnClickListener {
             featureOfSupervisorJob(service)
         }
+        binding.useScopeIndivisualButton.setOnClickListener {
+            testAsyncByParentScope(service)
+        }
     }
 
     private fun callApiNormally(service: GithubService) {
@@ -67,43 +70,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun testAsyncByParentScope(service: GithubService) {
+        val deferredError = lifecycleScope.async {
+            error("shot eror")
+            return@async "crash"
+        }
+
+        val deferredRepos = lifecycleScope.async {
+            val result = service.reposSuspend("wlals822")
+            withContext(Dispatchers.Main) {
+                binding.resultText.text = result.joinToString()
+            }
+        }
+
+        // defferedError에서 바로 예외가 터지지만 깃헙 요청은 성공적으로 진행함.
+        lifecycleScope.launch {
+            try {
+//                deferredError.await()
+//                deferredRepos.await()
+            } catch (ex: Exception) {
+                Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     /**
      * App crash by async block's error propagation
      * async, launch
      */
     private fun crashThisApp(service: GithubService) {
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    async {
+
+        //  cannot catch exception
+        try {
+            lifecycleScope.launch {
+                try {
+                    async(Dispatchers.IO) { // uses new job (not supervisorJob)
                         error("shot error")
                     }
-                }
-            } catch (ex: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
-                    binding.resultText.text = ex.toString()
+                } catch (ex: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+                        binding.resultText.text = ex.toString()
+                    }
                 }
             }
+        } catch (ex: Exception) {
+            Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+            binding.resultText.text = ex.toString()
         }
-        //      cannot catch exception
-//        try {
-//            lifecycleScope.launch {
-//                try {
-//                    async(Dispatchers.IO) {
-//                        error("shot error")
-//                    }
-//                } catch (ex: Exception) {
-//                    withContext(Dispatchers.Main) {
-//                        Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
-//                        binding.resultText.text = ex.toString()
-//                    }
-//                }
-//            }
-//        } catch (ex: Exception) {
-//            Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
-//            binding.resultText.text = ex.toString()
-//        }
     }
 
     /**
