@@ -5,11 +5,8 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.zapps.coroutinecrashdemos.databinding.ActivityMainBinding
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.rx2.await
-import kotlinx.coroutines.withContext
 import java.lang.Exception
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
@@ -32,7 +29,7 @@ class MainActivity : AppCompatActivity() {
             .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
             .build()
 
-        val service: GithubService= retrofit.create(GithubService::class.java)
+        val service: GithubService = retrofit.create(GithubService::class.java)
 
         binding.successButton.setOnClickListener {
             callApiNormally(service)
@@ -45,11 +42,14 @@ class MainActivity : AppCompatActivity() {
 
         // 앱이 강제 종료됩니다.
         binding.asyncCrashButton.setOnClickListener {
-            crashThisApp()
+            crashThisApp(service)
         }
 
         binding.asyncCatchButton.setOnClickListener {
             catchErrorByWrappingNewContext()
+        }
+        binding.testSuperviorButton.setOnClickListener {
+            featureOfSupervisorJob(service)
         }
     }
 
@@ -71,11 +71,13 @@ class MainActivity : AppCompatActivity() {
      * App crash by async block's error propagation
      * async, launch
      */
-    private fun crashThisApp() {
+    private fun crashThisApp(service: GithubService) {
         lifecycleScope.launch {
             try {
-                async {
-                    throw error("shot error")
+                withContext(Dispatchers.IO) {
+                    async {
+                        error("shot error")
+                    }
                 }
             } catch (ex: Exception) {
                 withContext(Dispatchers.Main) {
@@ -84,6 +86,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        //      cannot catch exception
+//        try {
+//            lifecycleScope.launch {
+//                try {
+//                    async(Dispatchers.IO) {
+//                        error("shot error")
+//                    }
+//                } catch (ex: Exception) {
+//                    withContext(Dispatchers.Main) {
+//                        Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+//                        binding.resultText.text = ex.toString()
+//                    }
+//                }
+//            }
+//        } catch (ex: Exception) {
+//            Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+//            binding.resultText.text = ex.toString()
+//        }
     }
 
     /**
@@ -118,6 +138,28 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
                     binding.resultText.text = ex.toString()
+                }
+            }
+        }
+    }
+
+    // app crash
+    private fun featureOfSupervisorJob(service: GithubService) {
+        lifecycleScope.launch {
+            launch {
+                try {
+                    async {
+                        service.reposSuspend("wlals822")
+                    }
+                } catch (ex: Exception) {
+                    Toast.makeText(this@MainActivity, "api error", Toast.LENGTH_SHORT).show()
+                }
+            }
+            launch {
+                delay(1000)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "message after delay", Toast.LENGTH_SHORT)
+                        .show()
                 }
             }
         }
