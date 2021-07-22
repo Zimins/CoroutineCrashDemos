@@ -2,6 +2,7 @@ package com.zapps.coroutinecrashdemos
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.zapps.coroutinecrashdemos.databinding.ActivityMainBinding
@@ -11,6 +12,7 @@ import java.lang.Exception
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.logging.Logger
 
 
 class MainActivity : AppCompatActivity() {
@@ -71,21 +73,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun testAsyncByParentScope(service: GithubService) {
+        // launch 는 바로 터짐, async는 root를 사용하기 때문에 지연됨.
         val deferredError = lifecycleScope.async {
             error("shot eror")
-            return@async "crash"
         }
 
         val deferredRepos = lifecycleScope.async {
+            delay(1000)
             val result = service.reposSuspend("wlals822")
             withContext(Dispatchers.Main) {
                 binding.resultText.text = result.joinToString()
             }
         }
 
-        // defferedError에서 바로 예외가 터지지만 깃헙 요청은 성공적으로 진행함.
+        // 이런 상태에서 job1을 예외처리 해도 job2 의 결과는 출력되지 않는다.
+//        val scope = CoroutineScope(Job())
+//        val notSupervisorJob1 = scope.async {
+//            error("shot error")
+//        }
+//
+//        val notSupervisorJob2 = scope.launch {
+//            val result = service.reposSuspend("wlals822")
+//            withContext(Dispatchers.Main) {
+//                binding.resultText.text = result.joinToString()
+//            }
+//        }
+        // defferedError에서 바로 예외가 터져서 deferredError는 취소되지만 깃헙 요청은 성공적으로 진행함.
         lifecycleScope.launch {
             try {
+//                notSupervisorJob1.await()
 //                deferredError.await()
 //                deferredRepos.await()
             } catch (ex: Exception) {
@@ -125,17 +141,33 @@ class MainActivity : AppCompatActivity() {
      */
     private fun catchErrorByWrappingNewContext() {
         lifecycleScope.launch {
+            Log.d("job info", coroutineContext.job.toString())
             try {
-                withContext(Dispatchers.Main) { // catch by new root = runblocking, coroutineScope, GlobalScope.launch
-                    async {
-                        throw error("shot error")
-                    }
-                }
+                // When extract method by ide, it has different method signature
+//                runSuspendedAction()
+//                runLaunchJob()
             } catch (ex: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "catched error", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "catched error: $ex", Toast.LENGTH_SHORT).show()
                     binding.resultText.text = ex.toString()
                 }
+            }
+        }
+    }
+
+    // Uses CoroutineScope as a Receiver
+    private fun CoroutineScope.runLaunchJob() {
+        launch {
+            error("error on launch")
+        }
+    }
+
+    // No Parameter
+    private suspend fun runSuspendedAction() {
+        withContext(Dispatchers.Main) {
+            Log.d("job info", coroutineContext.job.toString())
+            async {
+                error("shot error")
             }
         }
     }
